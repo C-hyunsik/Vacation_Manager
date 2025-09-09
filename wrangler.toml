@@ -1,0 +1,19 @@
+name = "vacation-manager-api"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "vacation-manager-db"
+database_id = "5a074db9-2e92-411c-98ba-a6859f5524f3"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "vacation-manager-db"
+database_id = "5a074db9-2e92-411c-98ba-a6859f5524f3"

@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import VacationAPI from './api.js'
 import './App.css'
+import './loading.css'
 
 function App() {
-  const [employees] = useState([
-    { id: 1, name: '김철수', department: '개발팀', yearlyAllowance: 15 },
-    { id: 2, name: '이영희', department: '마케팅팀', yearlyAllowance: 15 },
-    { id: 3, name: '박민수', department: '인사팀', yearlyAllowance: 15 },
-    { id: 4, name: '정수진', department: '디자인팀', yearlyAllowance: 15 },
-    { id: 5, name: '최우진', department: '개발팀', yearlyAllowance: 15 }
-  ])
+  const [employees, setEmployees] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [vacations, setVacations] = useState([])
   const [selectedEmployee, setSelectedEmployee] = useState(null)
@@ -35,8 +33,107 @@ function App() {
   })
   const dashboardRef = useRef(null)
 
+  // 직원 데이터 로드
+  useEffect(() => {
+    loadEmployees()
+    loadVacations()
+  }, [])
+
+  const loadEmployees = async () => {
+    try {
+      setLoading(true)
+      const employeeData = await VacationAPI.getEmployees()
+      // DB 컬럼명을 React state 형식으로 변환
+      const formattedEmployees = employeeData.map(emp => ({
+        id: emp.id,
+        name: emp.name,
+        department: emp.department,
+        yearlyAllowance: emp.yearly_allowance,
+        hireDate: emp.hire_date
+      }))
+      setEmployees(formattedEmployees)
+      setError(null)
+    } catch (err) {
+      console.error('직원 데이터 로드 실패:', err)
+      setError('직원 데이터를 불러오는데 실패했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadVacations = async () => {
+    try {
+      const vacationData = await VacationAPI.getVacations()
+      // DB 컬럼명을 React state 형식으로 변환
+      const formattedVacations = vacationData.map(vac => ({
+        id: vac.id,
+        employeeId: vac.employee_id,
+        employeeName: vac.employee_name,
+        type: vac.type,
+        startDate: vac.start_date,
+        endDate: vac.end_date,
+        reason: vac.reason,
+        createdAt: vac.created_at
+      }))
+      setVacations(formattedVacations)
+    } catch (err) {
+      console.error('휴가 데이터 로드 실패:', err)
+      setError('휴가 데이터를 불러오는데 실패했습니다.')
+    }
+  }
+
   const getEmployeeVacations = (employeeId) => {
     return vacations.filter(vacation => vacation.employeeId === employeeId)
+  }
+
+  // 입사일로부터 1년이 지났는지 확인
+  const isEmployeeOverOneYear = (hireDate) => {
+    const hire = new Date(hireDate)
+    const today = new Date()
+    const oneYearAfterHire = new Date(hire.getFullYear() + 1, hire.getMonth(), hire.getDate())
+    return today >= oneYearAfterHire
+  }
+
+  // 휴가 년도 계산 (입사일 기준)
+  const getVacationYear = (hireDate) => {
+    const hire = new Date(hireDate)
+    const today = new Date()
+    
+    // 입사일의 월/일을 기준으로 휴가 년도 계산
+    let vacationYear = today.getFullYear()
+    if (today.getMonth() < hire.getMonth() || 
+        (today.getMonth() === hire.getMonth() && today.getDate() < hire.getDate())) {
+      vacationYear = today.getFullYear() - 1
+    }
+    
+    return vacationYear
+  }
+
+  // 현재 휴가 년도의 총 휴가 일수 계산
+  const getCurrentYearAllowance = (employee) => {
+    if (!isEmployeeOverOneYear(employee.hireDate)) {
+      return 0 // 신입사원은 기준이 0일
+    }
+    
+    // 입사일로부터 경과 년수에 따른 휴가 일수 계산 가능
+    // 현재는 기본 15일로 설정
+    return employee.yearlyAllowance
+  }
+
+  // 휴가 갱신일 계산
+  const getNextVacationRenewalDate = (hireDate) => {
+    const hire = new Date(hireDate)
+    const today = new Date()
+    
+    let renewalYear = today.getFullYear()
+    let renewalDate = new Date(renewalYear, hire.getMonth(), hire.getDate())
+    
+    if (renewalDate <= today) {
+      renewalYear += 1
+      renewalDate = new Date(renewalYear, hire.getMonth(), hire.getDate())
+    }
+    
+    return renewalDate
   }
 
   const calculateUsedDays = (employeeId) => {
@@ -57,8 +154,29 @@ function App() {
 
   const getEmployeeStats = (employee) => {
     const usedDays = calculateUsedDays(employee.id)
-    const remainingDays = employee.yearlyAllowance - usedDays
-    return { usedDays, remainingDays }
+    const currentAllowance = getCurrentYearAllowance(employee)
+    const isOverOneYear = isEmployeeOverOneYear(employee.hireDate)
+    
+    if (!isOverOneYear) {
+      // 신입사원: 0일 기준에서 사용한 일수 표시
+      return { 
+        usedDays, 
+        remainingDays: 0, 
+        currentAllowance: 0,
+        isNewEmployee: true,
+        nextRenewalDate: getNextVacationRenewalDate(employee.hireDate)
+      }
+    } else {
+      // 기존사원: 15일에서 사용일 차감
+      const remainingDays = currentAllowance - usedDays
+      return { 
+        usedDays, 
+        remainingDays, 
+        currentAllowance,
+        isNewEmployee: false,
+        nextRenewalDate: getNextVacationRenewalDate(employee.hireDate)
+      }
+    }
   }
 
   const handleInputChange = (e) => {
@@ -68,39 +186,53 @@ function App() {
     })
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!formData.employeeId || !formData.startDate || !formData.endDate) {
       alert('직원, 시작일, 종료일을 모두 선택해주세요.')
       return
     }
 
-    const employee = employees.find(emp => emp.id === parseInt(formData.employeeId))
-    const newVacation = {
-      id: Date.now(),
-      employeeId: parseInt(formData.employeeId),
-      employeeName: employee.name,
-      type: formData.type,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      reason: formData.reason,
-      createdAt: new Date().toISOString()
-    }
+    try {
+      const employee = employees.find(emp => emp.id === parseInt(formData.employeeId))
+      const vacationData = {
+        employee_id: parseInt(formData.employeeId),
+        type: formData.type,
+        start_date: formData.startDate,
+        end_date: formData.endDate,
+        reason: formData.reason || null
+      }
 
-    setVacations([...vacations, newVacation])
-    setFormData({
-      employeeId: '',
-      type: '연차',
-      startDate: '',
-      endDate: '',
-      reason: ''
-    })
-    alert(`${employee.name}님의 휴가가 등록되었습니다.`)
+      await VacationAPI.createVacation(vacationData)
+      
+      // 휴가 데이터 재로드
+      await loadVacations()
+      
+      setFormData({
+        employeeId: '',
+        type: '연차',
+        startDate: '',
+        endDate: '',
+        reason: ''
+      })
+      alert(`${employee.name}님의 휴가가 등록되었습니다.`)
+    } catch (err) {
+      console.error('휴가 등록 실패:', err)
+      alert('휴가 등록에 실패했습니다.')
+    }
   }
 
-  const deleteVacation = (id) => {
+  const deleteVacation = async (id) => {
     if (confirm('휴가를 삭제하시겠습니까?')) {
-      setVacations(vacations.filter(vacation => vacation.id !== id))
+      try {
+        await VacationAPI.deleteVacation(id)
+        // 휴가 데이터 재로드
+        await loadVacations()
+        alert('휴가가 삭제되었습니다.')
+      } catch (err) {
+        console.error('휴가 삭제 실패:', err)
+        alert('휴가 삭제에 실패했습니다.')
+      }
     }
   }
 
@@ -181,7 +313,7 @@ function App() {
     }
   }
 
-  const handleModalSubmit = (e) => {
+  const handleModalSubmit = async (e) => {
     e.preventDefault()
     
     if (selectedEmployees.length === 0) {
@@ -189,28 +321,39 @@ function App() {
       return
     }
 
-    const dateStr = selectedDate.toISOString().split('T')[0]
-    const newVacations = selectedEmployees.map(employeeId => {
-      const employee = employees.find(emp => emp.id === employeeId)
-      return {
-        id: Date.now() + Math.random(),
-        employeeId: employeeId,
-        employeeName: employee.name,
-        type: modalFormData.type,
-        startDate: dateStr,
-        endDate: dateStr,
-        reason: modalFormData.reason,
-        createdAt: new Date().toISOString()
-      }
-    })
-
-    setVacations([...vacations, ...newVacations])
-    setShowModal(false)
-    setSelectedDate(null)
-    setSelectedEmployees([])
-    
-    const employeeNames = newVacations.map(v => v.employeeName).join(', ')
-    alert(`${employeeNames}님의 휴가가 등록되었습니다.`)
+    try {
+      const dateStr = selectedDate.toISOString().split('T')[0]
+      
+      // 각 직원에 대해 휴가 등록
+      const promises = selectedEmployees.map(employeeId => {
+        const vacationData = {
+          employee_id: employeeId,
+          type: modalFormData.type,
+          start_date: dateStr,
+          end_date: dateStr,
+          reason: modalFormData.reason || null
+        }
+        return VacationAPI.createVacation(vacationData)
+      })
+      
+      await Promise.all(promises)
+      
+      // 휴가 데이터 재로드
+      await loadVacations()
+      
+      setShowModal(false)
+      setSelectedDate(null)
+      setSelectedEmployees([])
+      
+      const employeeNames = selectedEmployees.map(id => {
+        const emp = employees.find(emp => emp.id === id)
+        return emp.name
+      }).join(', ')
+      alert(`${employeeNames}님의 휴가가 등록되었습니다.`)
+    } catch (err) {
+      console.error('휴가 등록 실패:', err)
+      alert('휴가 등록에 실패했습니다.')
+    }
   }
 
   // Export functions
@@ -355,7 +498,20 @@ function App() {
         </button>
       </nav>
 
-      {activeTab === 'dashboard' && (
+      {loading && (
+        <div className="loading-container">
+          <p>데이터를 불러오는 중...</p>
+        </div>
+      )}
+      
+      {error && (
+        <div className="error-container">
+          <p>오류: {error}</p>
+          <button onClick={() => { loadEmployees(); loadVacations(); }}>다시 시도</button>
+        </div>
+      )}
+      
+      {!loading && !error && activeTab === 'dashboard' && (
         <div className="dashboard-section" ref={dashboardRef}>
           <div className="dashboard-header">
             <h2>직원별 휴가 현황</h2>
@@ -396,28 +552,65 @@ function App() {
                       </button>
                     </div>
                   </div>
-                  <div className="vacation-stats">
-                    <div className="stat-item">
-                      <span className="label">연간 휴가</span>
-                      <span className="value">{employee.yearlyAllowance}일</span>
+                  <div className="employee-status">
+                    <div className="status-badge">
+                      {stats.isNewEmployee ? (
+                        <span className="badge new-employee">신입사원</span>
+                      ) : (
+                        <span className="badge regular-employee">재직사원</span>
+                      )}
                     </div>
-                    <div className="stat-item">
-                      <span className="label">사용</span>
-                      <span className="value used">{stats.usedDays}일</span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="label">남은</span>
-                      <span className={`value ${stats.remainingDays < 5 ? 'low' : 'remaining'}`}>
-                        {stats.remainingDays}일
+                    <div className="hire-info">
+                      <span className="hire-date">입사일: {employee.hireDate}</span>
+                      <span className="renewal-date">
+                        갱신일: {stats.nextRenewalDate.toLocaleDateString('ko-KR')}
                       </span>
                     </div>
                   </div>
-                  <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
-                      style={{width: `${(stats.usedDays / employee.yearlyAllowance) * 100}%`}}
-                    ></div>
+                  
+                  <div className="vacation-stats">
+                    {stats.isNewEmployee ? (
+                      <>
+                        <div className="stat-item">
+                          <span className="label">기준일수</span>
+                          <span className="value">0일</span>
+                        </div>
+                        <div className="stat-item">
+                          <span className="label">사용</span>
+                          <span className="value used">{stats.usedDays}일 사용</span>
+                        </div>
+                        <div className="stat-item new-employee-note">
+                          <span className="note">입사 1년 후 정규 휴가 부여</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="stat-item">
+                          <span className="label">연간 휴가</span>
+                          <span className="value">{stats.currentAllowance}일</span>
+                        </div>
+                        <div className="stat-item">
+                          <span className="label">사용</span>
+                          <span className="value used">{stats.usedDays}일</span>
+                        </div>
+                        <div className="stat-item">
+                          <span className="label">남은</span>
+                          <span className={`value ${stats.remainingDays < 5 ? 'low' : 'remaining'}`}>
+                            {stats.remainingDays}일
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
+                  
+                  {!stats.isNewEmployee && (
+                    <div className="progress-bar">
+                      <div 
+                        className="progress-fill" 
+                        style={{width: `${(stats.usedDays / stats.currentAllowance) * 100}%`}}
+                      ></div>
+                    </div>
+                  )}
                   <div className="recent-vacations">
                     <h4>최근 휴가</h4>
                     {employeeVacations.length === 0 ? (
@@ -445,7 +638,7 @@ function App() {
         </div>
       )}
 
-      {activeTab === 'calendar' && (
+      {!loading && !error && activeTab === 'calendar' && (
         <div className="calendar-section">
           <h2>달력 휴가 관리</h2>
           <div className="calendar-header">
@@ -587,7 +780,7 @@ function App() {
         </div>
       )}
 
-      {activeTab === 'register' && (
+      {!loading && !error && activeTab === 'register' && (
         <div className="register-section">
           <h2>직원 휴가 등록</h2>
           <form onSubmit={handleSubmit}>
@@ -664,7 +857,7 @@ function App() {
         </div>
       )}
 
-      {activeTab === 'all-vacations' && (
+      {!loading && !error && activeTab === 'all-vacations' && (
         <div className="list-section">
           <h2>전체 휴가 내역</h2>
           {vacations.length === 0 ? (
