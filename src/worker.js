@@ -1,4 +1,58 @@
 export default {
+  async scheduled(event, env, ctx) {
+    // 매일 자정에 실행되는 Cron Job - 휴가 자동 갱신
+    console.log('Running vacation renewal check...')
+    
+    try {
+      // 갱신일이 된 직원들 조회
+      const today = new Date().toISOString().split('T')[0]
+      
+      const { results: employees } = await env.DB.prepare(`
+        SELECT * FROM employees 
+        WHERE (
+          last_renewal_date IS NULL 
+          OR date(last_renewal_date, '+1 year') <= date(?)
+        )
+        AND date(hire_date, '+1 month') <= date(?)
+      `).bind(today, today).all()
+
+      console.log(`Found ${employees.length} employees for renewal`)
+
+      // 각 직원의 휴가 갱신 처리
+      for (const employee of employees) {
+        const hireDate = new Date(employee.hire_date)
+        const renewalMonth = hireDate.getMonth() + 1 // 다음달
+        const renewalDay = hireDate.getDate()
+        
+        // 올해 갱신일 계산
+        const currentYear = new Date().getFullYear()
+        let renewalDate = new Date(currentYear, renewalMonth > 11 ? 0 : renewalMonth, renewalDay)
+        if (renewalMonth > 11) renewalDate.setFullYear(currentYear + 1)
+        
+        const renewalDateStr = renewalDate.toISOString().split('T')[0]
+        
+        // 갱신일이 오늘이거나 지났는지 확인
+        if (renewalDateStr <= today) {
+          // 현재 남은 휴가에 연간 휴가 일수 추가
+          const newRemainingDays = (employee.current_remaining_days || 0) + employee.yearly_allowance
+          
+          // 마지막 갱신일과 남은 휴가 일수 업데이트
+          await env.DB.prepare(`
+            UPDATE employees 
+            SET last_renewal_date = ?, current_remaining_days = ?
+            WHERE id = ?
+          `).bind(today, newRemainingDays, employee.id).run()
+          
+          console.log(`Renewed vacation for employee: ${employee.name} - Added ${employee.yearly_allowance} days, Total: ${newRemainingDays} days`)
+        }
+      }
+      
+      console.log('Vacation renewal check completed')
+    } catch (error) {
+      console.error('Error in vacation renewal:', error)
+    }
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -52,6 +106,24 @@ export default {
         `).bind(employee_id, type, start_date, end_date, reason || null).run();
 
         if (result.success) {
+          // 사용한 휴가 일수 계산
+          const startDate = new Date(start_date);
+          const endDate = new Date(end_date);
+          const diffTime = Math.abs(endDate - startDate);
+          let usedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          
+          // 반차는 0.5일로 계산
+          if (type === '반차') {
+            usedDays = usedDays * 0.5;
+          }
+
+          // 직원의 현재 남은 휴가에서 사용 일수 차감
+          await env.DB.prepare(`
+            UPDATE employees 
+            SET current_remaining_days = COALESCE(current_remaining_days, 0) - ?
+            WHERE id = ?
+          `).bind(usedDays, employee_id).run();
+
           return new Response(JSON.stringify({ 
             success: true, 
             id: result.meta.last_row_id 
@@ -67,11 +139,43 @@ export default {
       if (path.startsWith('/api/vacations/') && request.method === 'DELETE') {
         const vacationId = path.split('/')[3];
         
+        // 삭제할 휴가 정보 조회
+        const { results: vacations } = await env.DB.prepare(
+          'SELECT * FROM vacations WHERE id = ?'
+        ).bind(vacationId).all();
+
+        if (vacations.length === 0) {
+          return new Response(JSON.stringify({ error: '휴가를 찾을 수 없습니다.' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const vacation = vacations[0];
+        
         const result = await env.DB.prepare(
           'DELETE FROM vacations WHERE id = ?'
         ).bind(vacationId).run();
 
         if (result.success) {
+          // 삭제된 휴가 일수 계산
+          const startDate = new Date(vacation.start_date);
+          const endDate = new Date(vacation.end_date);
+          const diffTime = Math.abs(endDate - startDate);
+          let usedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          
+          // 반차는 0.5일로 계산
+          if (vacation.type === '반차') {
+            usedDays = usedDays * 0.5;
+          }
+
+          // 직원의 현재 남은 휴가에 삭제된 일수 복원
+          await env.DB.prepare(`
+            UPDATE employees 
+            SET current_remaining_days = COALESCE(current_remaining_days, 0) + ?
+            WHERE id = ?
+          `).bind(usedDays, vacation.employee_id).run();
+
           return new Response(JSON.stringify({ success: true }), {
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
@@ -99,6 +203,27 @@ export default {
           });
         } else {
           throw new Error('직원 추가에 실패했습니다.');
+        }
+      }
+
+      // 직원 정보 수정
+      if (path.startsWith('/api/employees/') && !path.endsWith('/vacations') && request.method === 'PUT') {
+        const employeeId = path.split('/')[3];
+        const data = await request.json();
+        const { name, department, yearly_allowance, hire_date, current_remaining_days } = data;
+
+        const result = await env.DB.prepare(`
+          UPDATE employees 
+          SET name = ?, department = ?, yearly_allowance = ?, hire_date = ?, current_remaining_days = ?
+          WHERE id = ?
+        `).bind(name, department, yearly_allowance, hire_date, current_remaining_days, employeeId).run();
+
+        if (result.success) {
+          return new Response(JSON.stringify({ success: true }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        } else {
+          throw new Error('직원 정보 수정에 실패했습니다.');
         }
       }
 

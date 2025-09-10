@@ -1085,7 +1085,25 @@ nav button.active {
 .employee-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   margin-top: 15px;
+}
+
+.edit-employee-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.edit-employee-btn:hover {
+  background: #218838;
+  transform: translateY(-1px);
 }
 
 .delete-employee-btn {
@@ -1113,4 +1131,69 @@ nav button.active {
 
 .delete-employee-btn:disabled:hover {
   transform: none;
+}
+
+/* Employee Edit Modal styles */
+.edit-employee-modal {
+  max-width: 600px;
+  width: 95%;
+}
+
+.edit-employee-modal h3 {
+  margin: 0 0 25px 0;
+  color: #333;
+  font-size: 1.5em;
+  text-align: center;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 15px;
+}
+
+.form-help {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.8em;
+  color: #666;
+  font-style: italic;
+}
+
+/* Updated vacation stats styles */
+.main-stat {
+  background: #f8f9ff;
+  border-left: 4px solid #4a90e2;
+  padding: 15px 20px !important;
+  margin: 10px 0 !important;
+  border-radius: 8px;
+}
+
+.main-stat .label {
+  font-size: 1.1em !important;
+  font-weight: 600 !important;
+  color: #333 !important;
+}
+
+.main-stat .value {
+  font-size: 1.8em !important;
+  font-weight: 700 !important;
+}
+
+.used-highlight {
+  color: #e74c3c !important;
+}
+
+.remaining-highlight {
+  color: #27ae60 !important;
+}
+
+.remaining-highlight.low {
+  color: #e74c3c !important;
+}
+
+.secondary-stat {
+  opacity: 0.8;
+  font-size: 0.9em;
+}
+
+.secondary-stat .label,
+.secondary-stat .value {
+  font-size: 0.9em !important;
 }

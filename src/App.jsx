@@ -41,6 +41,17 @@ function App() {
     hireDate: ''
   })
 
+  // Employee edit modal states
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingEmployee, setEditingEmployee] = useState(null)
+  const [editForm, setEditForm] = useState({
+    name: '',
+    department: '',
+    yearlyAllowance: 15,
+    hireDate: '',
+    currentRemainingDays: 0
+  })
+
   // 직원 데이터 로드
   useEffect(() => {
     loadEmployees()
@@ -57,7 +68,9 @@ function App() {
         name: emp.name,
         department: emp.department,
         yearlyAllowance: emp.yearly_allowance,
-        hireDate: emp.hire_date
+        hireDate: emp.hire_date,
+        lastRenewalDate: emp.last_renewal_date,
+        currentRemainingDays: emp.current_remaining_days || 0
       }))
       setEmployees(formattedEmployees)
       setError(null)
@@ -123,22 +136,56 @@ function App() {
       return 0 // 신입사원은 기준이 0일
     }
     
-    // 입사일로부터 경과 년수에 따른 휴가 일수 계산 가능
-    // 현재는 기본 15일로 설정
-    return employee.yearlyAllowance
+    // 갱신 횟수에 따른 휴가 일수 계산
+    const renewalCount = getRenewalCount(employee.hireDate, employee.lastRenewalDate)
+    return employee.yearlyAllowance * renewalCount
   }
 
-  // 휴가 갱신일 계산
+  // 갱신 횟수 계산
+  const getRenewalCount = (hireDate, lastRenewalDate) => {
+    const hire = new Date(hireDate)
+    const today = new Date()
+    
+    // 첫 갱신일 계산 (입사일 다음달)
+    const firstRenewalMonth = hire.getMonth() + 1
+    const firstRenewalDay = hire.getDate()
+    let firstRenewal = new Date(hire.getFullYear(), firstRenewalMonth > 11 ? 0 : firstRenewalMonth, firstRenewalDay)
+    if (firstRenewalMonth > 11) firstRenewal.setFullYear(hire.getFullYear() + 1)
+    
+    // 현재까지 갱신된 횟수 계산
+    let renewalCount = 0
+    let currentRenewal = new Date(firstRenewal)
+    
+    while (currentRenewal <= today) {
+      renewalCount++
+      currentRenewal.setFullYear(currentRenewal.getFullYear() + 1)
+    }
+    
+    return Math.max(0, renewalCount)
+  }
+
+  // 휴가 갱신일 계산 (입사일 다음달로 변경)
   const getNextVacationRenewalDate = (hireDate) => {
     const hire = new Date(hireDate)
     const today = new Date()
     
+    // 입사일 다음달의 입사일로 설정 (1월 입사 -> 2월 갱신)
     let renewalYear = today.getFullYear()
-    let renewalDate = new Date(renewalYear, hire.getMonth(), hire.getDate())
+    let renewalMonth = hire.getMonth() + 1 // 다음달
+    let renewalDay = hire.getDate()
     
+    // 12월 입사인 경우 다음해 1월로 설정
+    if (renewalMonth > 11) {
+      renewalMonth = 0
+      renewalYear += 1
+    }
+    
+    let renewalDate = new Date(renewalYear, renewalMonth, renewalDay)
+    
+    // 갱신일이 이미 지났으면 다음해로 설정
     if (renewalDate <= today) {
       renewalYear += 1
-      renewalDate = new Date(renewalYear, hire.getMonth(), hire.getDate())
+      renewalDate = new Date(renewalYear, renewalMonth, renewalDay)
     }
     
     return renewalDate
@@ -175,8 +222,11 @@ function App() {
         nextRenewalDate: getNextVacationRenewalDate(employee.hireDate)
       }
     } else {
-      // 기존사원: 15일에서 사용일 차감
-      const remainingDays = currentAllowance - usedDays
+      // 현재 남은 휴가 일수가 설정되어 있으면 그것을 우선 사용
+      let remainingDays = employee.currentRemainingDays !== undefined && employee.currentRemainingDays !== null 
+        ? employee.currentRemainingDays 
+        : currentAllowance - usedDays
+
       return { 
         usedDays, 
         remainingDays, 
@@ -531,6 +581,57 @@ function App() {
     }
   }
 
+  // Employee edit functions
+  const openEditModal = (employee) => {
+    const stats = getEmployeeStats(employee)
+    setEditingEmployee(employee)
+    setEditForm({
+      name: employee.name,
+      department: employee.department,
+      yearlyAllowance: employee.yearlyAllowance,
+      hireDate: employee.hireDate,
+      currentRemainingDays: employee.currentRemainingDays || stats.remainingDays
+    })
+    setShowEditModal(true)
+  }
+
+  const handleEditFormChange = (e) => {
+    setEditForm({
+      ...editForm,
+      [e.target.name]: e.target.value
+    })
+  }
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault()
+    if (!editForm.name || !editForm.department || !editForm.hireDate) {
+      alert('이름, 부서, 입사일을 모두 입력해주세요.')
+      return
+    }
+
+    try {
+      const employeeData = {
+        name: editForm.name,
+        department: editForm.department,
+        yearly_allowance: parseInt(editForm.yearlyAllowance),
+        hire_date: editForm.hireDate,
+        current_remaining_days: parseInt(editForm.currentRemainingDays)
+      }
+
+      await VacationAPI.updateEmployee(editingEmployee.id, employeeData)
+      
+      // 직원 데이터 재로드
+      await loadEmployees()
+      
+      setShowEditModal(false)
+      setEditingEmployee(null)
+      alert(`${editForm.name}님의 정보가 수정되었습니다.`)
+    } catch (err) {
+      console.error('직원 정보 수정 실패:', err)
+      alert('직원 정보 수정에 실패했습니다.')
+    }
+  }
+
   return (
     <div className="admin-app">
       <header>
@@ -644,13 +745,9 @@ function App() {
                   <div className="vacation-stats">
                     {stats.isNewEmployee ? (
                       <>
-                        <div className="stat-item">
-                          <span className="label">기준일수</span>
-                          <span className="value">0일</span>
-                        </div>
-                        <div className="stat-item">
-                          <span className="label">사용</span>
-                          <span className="value used">{stats.usedDays}일 사용</span>
+                        <div className="stat-item main-stat">
+                          <span className="label">사용한 휴가</span>
+                          <span className="value used-highlight">{stats.usedDays}일 사용</span>
                         </div>
                         <div className="stat-item new-employee-note">
                           <span className="note">입사 1년 후 정규 휴가 부여</span>
@@ -658,19 +755,15 @@ function App() {
                       </>
                     ) : (
                       <>
-                        <div className="stat-item">
-                          <span className="label">연간 휴가</span>
-                          <span className="value">{stats.currentAllowance}일</span>
-                        </div>
-                        <div className="stat-item">
-                          <span className="label">사용</span>
-                          <span className="value used">{stats.usedDays}일</span>
-                        </div>
-                        <div className="stat-item">
-                          <span className="label">남은</span>
-                          <span className={`value ${stats.remainingDays < 5 ? 'low' : 'remaining'}`}>
+                        <div className="stat-item main-stat">
+                          <span className="label">남은 휴가</span>
+                          <span className={`value remaining-highlight ${stats.remainingDays < 5 ? 'low' : ''}`}>
                             {stats.remainingDays}일
                           </span>
+                        </div>
+                        <div className="stat-item secondary-stat">
+                          <span className="label">연간 휴가</span>
+                          <span className="value">{employee.yearlyAllowance}일</span>
                         </div>
                       </>
                     )}
@@ -680,7 +773,7 @@ function App() {
                     <div className="progress-bar">
                       <div 
                         className="progress-fill" 
-                        style={{width: `${(stats.usedDays / stats.currentAllowance) * 100}%`}}
+                        style={{width: `${Math.max(0, ((employee.yearlyAllowance - stats.remainingDays) / employee.yearlyAllowance) * 100)}%`}}
                       ></div>
                     </div>
                   )}
@@ -1083,6 +1176,13 @@ function App() {
 
                       <div className="employee-actions">
                         <button 
+                          className="edit-employee-btn"
+                          onClick={() => openEditModal(employee)}
+                          title="직원 정보 수정"
+                        >
+                          수정
+                        </button>
+                        <button 
                           className="delete-employee-btn"
                           onClick={() => deleteEmployee(employee.id, employee.name)}
                           disabled={employeeVacations.length > 0}
@@ -1096,6 +1196,94 @@ function App() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Employee Edit Modal */}
+      {showEditModal && editingEmployee && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content edit-employee-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>직원 정보 수정 - {editingEmployee.name}</h3>
+            
+            <form onSubmit={handleEditSubmit}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>이름</label>
+                  <input 
+                    type="text" 
+                    name="name"
+                    value={editForm.name}
+                    onChange={handleEditFormChange}
+                    placeholder="직원 이름"
+                    required
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>부서</label>
+                  <input 
+                    type="text" 
+                    name="department"
+                    value={editForm.department}
+                    onChange={handleEditFormChange}
+                    placeholder="소속 부서"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>연간 휴가 일수</label>
+                  <input 
+                    type="number" 
+                    name="yearlyAllowance"
+                    value={editForm.yearlyAllowance}
+                    onChange={handleEditFormChange}
+                    min="0"
+                    max="30"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>입사일</label>
+                  <input 
+                    type="date" 
+                    name="hireDate"
+                    value={editForm.hireDate}
+                    onChange={handleEditFormChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>현재 남은 휴가 일수</label>
+                  <input 
+                    type="number" 
+                    name="currentRemainingDays"
+                    value={editForm.currentRemainingDays}
+                    onChange={handleEditFormChange}
+                    min="0"
+                    max="50"
+                  />
+                  <small className="form-help">
+                    직접 수정 가능합니다. 자동 계산값을 무시하고 이 값이 사용됩니다.
+                  </small>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" onClick={() => setShowEditModal(false)}>
+                  취소
+                </button>
+                <button type="submit">
+                  수정 완료
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

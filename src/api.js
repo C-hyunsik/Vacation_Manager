@@ -64,6 +64,14 @@ class VacationAPI {
     });
   }
 
+  // 직원 정보 수정
+  async updateEmployee(employeeId, employeeData) {
+    return this.request(`/api/employees/${employeeId}`, {
+      method: 'PUT',
+      body: JSON.stringify(employeeData),
+    });
+  }
+
   // 직원 삭제
   async deleteEmployee(employeeId) {
     return this.request(`/api/employees/${employeeId}`, {

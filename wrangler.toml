@@ -9,3 +9,6 @@ database_id = "5a074db9-2e92-411c-98ba-a6859f5524f3"
 
 [vars]
 ENVIRONMENT = "development"
+
+[triggers]
+crons = ["0 0 * * *"]
