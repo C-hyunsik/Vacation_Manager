@@ -231,20 +231,12 @@ export default {
       if (path.startsWith('/api/employees/') && !path.endsWith('/vacations') && request.method === 'DELETE') {
         const employeeId = path.split('/')[3];
         
-        // 먼저 해당 직원의 휴가 기록이 있는지 확인
-        const { results: vacations } = await env.DB.prepare(
-          'SELECT COUNT(*) as count FROM vacations WHERE employee_id = ?'
-        ).bind(employeeId).all();
+        // 먼저 해당 직원의 모든 휴가 기록 삭제
+        await env.DB.prepare(
+          'DELETE FROM vacations WHERE employee_id = ?'
+        ).bind(employeeId).run();
 
-        if (vacations[0].count > 0) {
-          return new Response(JSON.stringify({ 
-            error: '해당 직원에게 휴가 기록이 있어 삭제할 수 없습니다. 먼저 휴가 기록을 삭제해주세요.' 
-          }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
-        }
-
+        // 그 다음 직원 삭제
         const result = await env.DB.prepare(
           'DELETE FROM employees WHERE id = ?'
         ).bind(employeeId).run();

@@ -263,8 +263,8 @@ function App() {
 
       await VacationAPI.createVacation(vacationData)
       
-      // 휴가 데이터 재로드
-      await loadVacations()
+      // 휴가 데이터와 직원 데이터 모두 재로드 (남은 휴가 실시간 반영)
+      await Promise.all([loadVacations(), loadEmployees()])
       
       setFormData({
         employeeId: '',
@@ -284,8 +284,8 @@ function App() {
     if (confirm('휴가를 삭제하시겠습니까?')) {
       try {
         await VacationAPI.deleteVacation(id)
-        // 휴가 데이터 재로드
-        await loadVacations()
+        // 휴가 데이터와 직원 데이터 모두 재로드 (남은 휴가 실시간 반영)
+        await Promise.all([loadVacations(), loadEmployees()])
         alert('휴가가 삭제되었습니다.')
       } catch (err) {
         console.error('휴가 삭제 실패:', err)
@@ -396,8 +396,8 @@ function App() {
       
       await Promise.all(promises)
       
-      // 휴가 데이터 재로드
-      await loadVacations()
+      // 휴가 데이터와 직원 데이터 모두 재로드 (남은 휴가 실시간 반영)
+      await Promise.all([loadVacations(), loadEmployees()])
       
       setShowModal(false)
       setSelectedDate(null)
@@ -564,19 +564,26 @@ function App() {
   }
 
   const deleteEmployee = async (employeeId, employeeName) => {
-    if (confirm(`${employeeName}님을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+    const employeeVacations = getEmployeeVacations(employeeId)
+    const hasVacations = employeeVacations.length > 0
+    
+    const confirmMessage = hasVacations 
+      ? `${employeeName}님을 삭제하시겠습니까?\n\n⚠️ 해당 직원의 휴가 기록 ${employeeVacations.length}건도 함께 삭제됩니다.\n\n이 작업은 되돌릴 수 없습니다.`
+      : `${employeeName}님을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`
+    
+    if (confirm(confirmMessage)) {
       try {
         await VacationAPI.deleteEmployee(employeeId)
-        // 직원 데이터 재로드
-        await loadEmployees()
-        alert(`${employeeName}님이 삭제되었습니다.`)
+        // 직원 데이터와 휴가 데이터 모두 재로드
+        await Promise.all([loadEmployees(), loadVacations()])
+        
+        const deleteMessage = hasVacations 
+          ? `${employeeName}님과 관련 휴가 기록 ${employeeVacations.length}건이 삭제되었습니다.`
+          : `${employeeName}님이 삭제되었습니다.`
+        alert(deleteMessage)
       } catch (err) {
         console.error('직원 삭제 실패:', err)
-        if (err.message.includes('휴가 기록이 있어')) {
-          alert('해당 직원에게 휴가 기록이 있어 삭제할 수 없습니다. 먼저 휴가 기록을 삭제해주세요.')
-        } else {
-          alert('직원 삭제에 실패했습니다.')
-        }
+        alert('직원 삭제에 실패했습니다.')
       }
     }
   }
@@ -642,31 +649,51 @@ function App() {
       <nav>
         <button 
           className={activeTab === 'dashboard' ? 'active' : ''}
-          onClick={() => setActiveTab('dashboard')}
+          onClick={() => {
+            setActiveTab('dashboard')
+            loadEmployees()
+            loadVacations()
+          }}
         >
           직원 현황
         </button>
         <button 
           className={activeTab === 'calendar' ? 'active' : ''}
-          onClick={() => setActiveTab('calendar')}
+          onClick={() => {
+            setActiveTab('calendar')
+            loadEmployees()
+            loadVacations()
+          }}
         >
           달력 관리
         </button>
         <button 
           className={activeTab === 'register' ? 'active' : ''}
-          onClick={() => setActiveTab('register')}
+          onClick={() => {
+            setActiveTab('register')
+            loadEmployees()
+            loadVacations()
+          }}
         >
           휴가 등록
         </button>
         <button 
           className={activeTab === 'all-vacations' ? 'active' : ''}
-          onClick={() => setActiveTab('all-vacations')}
+          onClick={() => {
+            setActiveTab('all-vacations')
+            loadEmployees()
+            loadVacations()
+          }}
         >
           전체 휴가 내역
         </button>
         <button 
           className={activeTab === 'employee-management' ? 'active' : ''}
-          onClick={() => setActiveTab('employee-management')}
+          onClick={() => {
+            setActiveTab('employee-management')
+            loadEmployees()
+            loadVacations()
+          }}
         >
           직원 관리
         </button>
@@ -1185,10 +1212,9 @@ function App() {
                         <button 
                           className="delete-employee-btn"
                           onClick={() => deleteEmployee(employee.id, employee.name)}
-                          disabled={employeeVacations.length > 0}
-                          title={employeeVacations.length > 0 ? '휴가 기록이 있는 직원은 삭제할 수 없습니다' : '직원 삭제'}
+                          title={employeeVacations.length > 0 ? `직원과 휴가 기록 ${employeeVacations.length}건을 함께 삭제합니다` : '직원 삭제'}
                         >
-                          {employeeVacations.length > 0 ? '삭제 불가' : '삭제'}
+                          삭제
                         </button>
                       </div>
                     </div>

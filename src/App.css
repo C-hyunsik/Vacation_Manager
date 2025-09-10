@@ -1118,19 +1118,9 @@ nav button.active {
   transition: all 0.3s ease;
 }
 
-.delete-employee-btn:hover:not(:disabled) {
+.delete-employee-btn:hover {
   background: #c82333;
   transform: translateY(-1px);
-}
-
-.delete-employee-btn:disabled {
-  background: #6c757d;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.delete-employee-btn:disabled:hover {
-  transform: none;
 }
 
 /* Employee Edit Modal styles */
