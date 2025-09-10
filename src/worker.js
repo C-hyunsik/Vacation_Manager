@@ -80,6 +80,59 @@ export default {
         }
       }
 
+      // 직원 추가
+      if (path === '/api/employees' && request.method === 'POST') {
+        const data = await request.json();
+        const { name, department, yearly_allowance, hire_date } = data;
+
+        const result = await env.DB.prepare(`
+          INSERT INTO employees (name, department, yearly_allowance, hire_date)
+          VALUES (?, ?, ?, ?)
+        `).bind(name, department, yearly_allowance || 15, hire_date).run();
+
+        if (result.success) {
+          return new Response(JSON.stringify({ 
+            success: true, 
+            id: result.meta.last_row_id 
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        } else {
+          throw new Error('직원 추가에 실패했습니다.');
+        }
+      }
+
+      // 직원 삭제
+      if (path.startsWith('/api/employees/') && !path.endsWith('/vacations') && request.method === 'DELETE') {
+        const employeeId = path.split('/')[3];
+        
+        // 먼저 해당 직원의 휴가 기록이 있는지 확인
+        const { results: vacations } = await env.DB.prepare(
+          'SELECT COUNT(*) as count FROM vacations WHERE employee_id = ?'
+        ).bind(employeeId).all();
+
+        if (vacations[0].count > 0) {
+          return new Response(JSON.stringify({ 
+            error: '해당 직원에게 휴가 기록이 있어 삭제할 수 없습니다. 먼저 휴가 기록을 삭제해주세요.' 
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const result = await env.DB.prepare(
+          'DELETE FROM employees WHERE id = ?'
+        ).bind(employeeId).run();
+
+        if (result.success) {
+          return new Response(JSON.stringify({ success: true }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        } else {
+          throw new Error('직원 삭제에 실패했습니다.');
+        }
+      }
+
       // 특정 직원의 휴가 조회
       if (path.startsWith('/api/employees/') && path.endsWith('/vacations') && request.method === 'GET') {
         const employeeId = path.split('/')[3];

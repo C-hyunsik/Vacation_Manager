@@ -55,6 +55,21 @@ class VacationAPI {
       method: 'DELETE',
     });
   }
+
+  // 직원 추가
+  async createEmployee(employeeData) {
+    return this.request('/api/employees', {
+      method: 'POST',
+      body: JSON.stringify(employeeData),
+    });
+  }
+
+  // 직원 삭제
+  async deleteEmployee(employeeId) {
+    return this.request(`/api/employees/${employeeId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export default new VacationAPI();

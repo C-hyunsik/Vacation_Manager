@@ -33,6 +33,14 @@ function App() {
   })
   const dashboardRef = useRef(null)
 
+  // Employee management states
+  const [employeeForm, setEmployeeForm] = useState({
+    name: '',
+    department: '',
+    yearlyAllowance: 15,
+    hireDate: ''
+  })
+
   // 직원 데이터 로드
   useEffect(() => {
     loadEmployees()
@@ -464,6 +472,65 @@ function App() {
     }
   }
 
+  // Employee management functions
+  const handleEmployeeFormChange = (e) => {
+    setEmployeeForm({
+      ...employeeForm,
+      [e.target.name]: e.target.value
+    })
+  }
+
+  const handleEmployeeSubmit = async (e) => {
+    e.preventDefault()
+    if (!employeeForm.name || !employeeForm.department || !employeeForm.hireDate) {
+      alert('이름, 부서, 입사일을 모두 입력해주세요.')
+      return
+    }
+
+    try {
+      const employeeData = {
+        name: employeeForm.name,
+        department: employeeForm.department,
+        yearly_allowance: parseInt(employeeForm.yearlyAllowance),
+        hire_date: employeeForm.hireDate
+      }
+
+      await VacationAPI.createEmployee(employeeData)
+      
+      // 직원 데이터 재로드
+      await loadEmployees()
+      
+      setEmployeeForm({
+        name: '',
+        department: '',
+        yearlyAllowance: 15,
+        hireDate: ''
+      })
+      alert(`${employeeData.name}님이 추가되었습니다.`)
+    } catch (err) {
+      console.error('직원 추가 실패:', err)
+      alert('직원 추가에 실패했습니다.')
+    }
+  }
+
+  const deleteEmployee = async (employeeId, employeeName) => {
+    if (confirm(`${employeeName}님을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+      try {
+        await VacationAPI.deleteEmployee(employeeId)
+        // 직원 데이터 재로드
+        await loadEmployees()
+        alert(`${employeeName}님이 삭제되었습니다.`)
+      } catch (err) {
+        console.error('직원 삭제 실패:', err)
+        if (err.message.includes('휴가 기록이 있어')) {
+          alert('해당 직원에게 휴가 기록이 있어 삭제할 수 없습니다. 먼저 휴가 기록을 삭제해주세요.')
+        } else {
+          alert('직원 삭제에 실패했습니다.')
+        }
+      }
+    }
+  }
+
   return (
     <div className="admin-app">
       <header>
@@ -495,6 +562,12 @@ function App() {
           onClick={() => setActiveTab('all-vacations')}
         >
           전체 휴가 내역
+        </button>
+        <button 
+          className={activeTab === 'employee-management' ? 'active' : ''}
+          onClick={() => setActiveTab('employee-management')}
+        >
+          직원 관리
         </button>
       </nav>
 
@@ -900,6 +973,130 @@ function App() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {!loading && !error && activeTab === 'employee-management' && (
+        <div className="employee-management-section">
+          <h2>직원 관리</h2>
+          
+          {/* 직원 추가 폼 */}
+          <div className="add-employee-form">
+            <h3>새 직원 추가</h3>
+            <form onSubmit={handleEmployeeSubmit}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>이름</label>
+                  <input 
+                    type="text" 
+                    name="name"
+                    value={employeeForm.name}
+                    onChange={handleEmployeeFormChange}
+                    placeholder="직원 이름"
+                    required
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>부서</label>
+                  <input 
+                    type="text" 
+                    name="department"
+                    value={employeeForm.department}
+                    onChange={handleEmployeeFormChange}
+                    placeholder="소속 부서"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>연간 휴가 일수</label>
+                  <input 
+                    type="number" 
+                    name="yearlyAllowance"
+                    value={employeeForm.yearlyAllowance}
+                    onChange={handleEmployeeFormChange}
+                    min="0"
+                    max="30"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>입사일</label>
+                  <input 
+                    type="date" 
+                    name="hireDate"
+                    value={employeeForm.hireDate}
+                    onChange={handleEmployeeFormChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="submit-btn">직원 추가</button>
+            </form>
+          </div>
+
+          {/* 직원 목록 */}
+          <div className="employee-list-management">
+            <h3>직원 목록 관리</h3>
+            {employees.length === 0 ? (
+              <p className="no-data">등록된 직원이 없습니다.</p>
+            ) : (
+              <div className="employee-management-grid">
+                {employees.map(employee => {
+                  const stats = getEmployeeStats(employee)
+                  const employeeVacations = getEmployeeVacations(employee.id)
+                  return (
+                    <div key={employee.id} className="employee-management-card">
+                      <div className="employee-info">
+                        <div className="employee-header">
+                          <h4>{employee.name}</h4>
+                          <span className="department">{employee.department}</span>
+                        </div>
+                        
+                        <div className="employee-details">
+                          <div className="detail-item">
+                            <span className="label">입사일:</span>
+                            <span className="value">{employee.hireDate}</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="label">연간 휴가:</span>
+                            <span className="value">{employee.yearlyAllowance}일</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="label">사용 휴가:</span>
+                            <span className="value">{stats.usedDays}일</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="label">남은 휴가:</span>
+                            <span className="value">{stats.isNewEmployee ? '신입사원' : `${stats.remainingDays}일`}</span>
+                          </div>
+                          <div className="detail-item">
+                            <span className="label">휴가 기록:</span>
+                            <span className="value">{employeeVacations.length}건</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="employee-actions">
+                        <button 
+                          className="delete-employee-btn"
+                          onClick={() => deleteEmployee(employee.id, employee.name)}
+                          disabled={employeeVacations.length > 0}
+                          title={employeeVacations.length > 0 ? '휴가 기록이 있는 직원은 삭제할 수 없습니다' : '직원 삭제'}
+                        >
+                          {employeeVacations.length > 0 ? '삭제 불가' : '삭제'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
