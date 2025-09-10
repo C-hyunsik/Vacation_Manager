@@ -639,6 +639,23 @@ function App() {
     }
   }
 
+  // 갱신 테스트 함수
+  const handleRenewalTest = async () => {
+    if (confirm('갱신 테스트를 실행하시겠습니까?\n\n갱신일이 지난 직원들의 휴가가 자동으로 추가됩니다.')) {
+      try {
+        const result = await VacationAPI.testRenewal()
+        
+        // 직원 데이터 새로고침
+        await loadEmployees()
+        
+        alert(`갱신 테스트 완료!\n\n총 직원: ${result.totalEmployees}명\n갱신된 직원: ${result.renewedEmployees}명\n테스트 날짜: ${result.testDate}`)
+      } catch (err) {
+        console.error('갱신 테스트 실패:', err)
+        alert('갱신 테스트에 실패했습니다.')
+      }
+    }
+  }
+
   return (
     <div className="admin-app">
       <header>
@@ -1161,7 +1178,16 @@ function App() {
 
           {/* 직원 목록 */}
           <div className="employee-list-management">
-            <h3>직원 목록 관리</h3>
+            <div className="management-header">
+              <h3>직원 목록 관리</h3>
+              <button 
+                className="test-renewal-btn"
+                onClick={handleRenewalTest}
+                title="갱신일이 지난 직원들의 휴가를 수동으로 갱신합니다"
+              >
+                🔄 갱신 테스트
+              </button>
+            </div>
             {employees.length === 0 ? (
               <p className="no-data">등록된 직원이 없습니다.</p>
             ) : (

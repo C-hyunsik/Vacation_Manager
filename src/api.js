@@ -78,6 +78,13 @@ class VacationAPI {
       method: 'DELETE',
     });
   }
+
+  // 갱신 테스트 (개발용)
+  async testRenewal() {
+    return this.request('/api/test/renewal', {
+      method: 'POST',
+    });
+  }
 }
 
 export default new VacationAPI();

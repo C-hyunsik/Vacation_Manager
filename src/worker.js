@@ -265,6 +265,78 @@ export default {
         });
       }
 
+      // 수동 갱신 테스트 (개발용)
+      if (path === '/api/test/renewal' && request.method === 'POST') {
+        console.log('Manual renewal test triggered...')
+        
+        try {
+          // 기존 scheduled 함수의 갱신 로직을 그대로 실행
+          const today = new Date().toISOString().split('T')[0]
+          
+          const { results: employees } = await env.DB.prepare(`
+            SELECT * FROM employees 
+            WHERE (
+              last_renewal_date IS NULL 
+              OR date(last_renewal_date, '+1 year') <= date(?)
+            )
+            AND date(hire_date, '+1 month') <= date(?)
+          `).bind(today, today).all()
+
+          console.log(`Found ${employees.length} employees for renewal`)
+          let renewedCount = 0
+
+          // 각 직원의 휴가 갱신 처리
+          for (const employee of employees) {
+            const hireDate = new Date(employee.hire_date)
+            const renewalMonth = hireDate.getMonth() + 1 // 다음달
+            const renewalDay = hireDate.getDate()
+            
+            // 올해 갱신일 계산
+            const currentYear = new Date().getFullYear()
+            let renewalDate = new Date(currentYear, renewalMonth > 11 ? 0 : renewalMonth, renewalDay)
+            if (renewalMonth > 11) renewalDate.setFullYear(currentYear + 1)
+            
+            const renewalDateStr = renewalDate.toISOString().split('T')[0]
+            
+            // 갱신일이 오늘이거나 지났는지 확인
+            if (renewalDateStr <= today) {
+              // 현재 남은 휴가에 연간 휴가 일수 추가
+              const newRemainingDays = (employee.current_remaining_days || 0) + employee.yearly_allowance
+              
+              // 마지막 갱신일과 남은 휴가 일수 업데이트
+              await env.DB.prepare(`
+                UPDATE employees 
+                SET last_renewal_date = ?, current_remaining_days = ?
+                WHERE id = ?
+              `).bind(today, newRemainingDays, employee.id).run()
+              
+              console.log(`Renewed vacation for employee: ${employee.name} - Added ${employee.yearly_allowance} days, Total: ${newRemainingDays} days`)
+              renewedCount++
+            }
+          }
+          
+          return new Response(JSON.stringify({
+            success: true,
+            message: `갱신 테스트 완료`,
+            totalEmployees: employees.length,
+            renewedEmployees: renewedCount,
+            testDate: today
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+          
+        } catch (error) {
+          console.error('Manual renewal test error:', error)
+          return new Response(JSON.stringify({
+            success: false,
+            error: error.message
+          }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      }
+
       // 404 처리
       return new Response('Not Found', { 
         status: 404,
