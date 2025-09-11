@@ -489,6 +489,7 @@ nav button.active {
   display: flex;
   align-items: center;
   gap: 15px;
+  flex-direction: column;
 }
 
 .employee-name {
@@ -1042,6 +1043,7 @@ nav button.active {
   margin-bottom: 15px;
   padding-bottom: 15px;
   border-bottom: 2px solid #f0f0f0;
+  width: 100%;
 }
 
 .employee-management-card h4 {
@@ -1063,6 +1065,7 @@ nav button.active {
   display: grid;
   gap: 8px;
   margin-bottom: 20px;
+  width:100%;
 }
 
 .detail-item {
