@@ -237,6 +237,408 @@ header p {
   color: #2c3e50;
 }
 
+/* ===== NEW INTEGRATED MODAL STYLES ===== */
+.vacation-management-modal {
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.3em;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 5px;
+  border-radius: 50%;
+  transition: all 0.3s;
+}
+
+.close-btn:hover {
+  background: #f8f9fa;
+  color: #dc3545;
+}
+
+.modal-mode-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 25px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.mode-tab {
+  padding: 12px 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  font-weight: 500;
+  color: #6c757d;
+  transition: all 0.3s;
+  font-size: 0.95em;
+}
+
+.mode-tab:hover {
+  color: #4a90e2;
+  background: #f8f9fa;
+}
+
+.mode-tab.active {
+  color: #4a90e2;
+  border-bottom-color: #4a90e2;
+}
+
+.mode-tab:disabled {
+  color: #adb5bd;
+  cursor: not-allowed;
+}
+
+.mode-tab:disabled:hover {
+  background: none;
+  color: #adb5bd;
+}
+
+/* View Mode Styles */
+.vacation-list-view h4 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 1.1em;
+}
+
+.no-vacation-info {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6c757d;
+}
+
+.no-vacation-info p {
+  margin: 0 0 15px 0;
+  font-size: 1.1em;
+}
+
+.switch-mode-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+
+.switch-mode-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+}
+
+.vacation-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vacation-item-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 10px;
+  border-left: 4px solid #4a90e2;
+  transition: all 0.3s;
+}
+
+.vacation-item-card:hover {
+  background: #e9ecef;
+  transform: translateX(5px);
+}
+
+.vacation-info {
+  flex: 1;
+}
+
+.employee-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.employee-name {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 1em;
+}
+
+.vacation-type-badge {
+  padding: 4px 10px;
+  border-radius: 15px;
+  font-size: 0.8em;
+  font-weight: 500;
+  color: white;
+}
+
+.vacation-type-badge.연차 {
+  background: #28a745;
+}
+
+.vacation-type-badge.반차 {
+  background: #17a2b8;
+}
+
+.vacation-type-badge.병가 {
+  background: #dc3545;
+}
+
+.vacation-type-badge.경조사 {
+  background: #6f42c1;
+}
+
+.vacation-type-badge.특별휴가 {
+  background: #fd7e14;
+}
+
+.vacation-reason {
+  color: #6c757d;
+  font-size: 0.9em;
+  margin-bottom: 5px;
+  font-style: italic;
+}
+
+.vacation-duration {
+  color: #495057;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+.vacation-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.edit-btn, .delete-btn {
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.3s;
+  background: none;
+  border: 1px solid transparent;
+}
+
+.edit-btn {
+  color: #495057;
+  background: #e9ecef;
+}
+
+.edit-btn:hover {
+  background: #007bff;
+  color: white;
+  transform: scale(1.1);
+}
+
+.delete-btn {
+  color: #495057;
+  background: #e9ecef;
+}
+
+.delete-btn:hover {
+  background: #dc3545;
+  color: white;
+  transform: scale(1.1);
+}
+
+/* Form Styles */
+.vacation-add-form h4,
+.vacation-edit-form h4 {
+  margin: 0 0 20px 0;
+  color: #2c3e50;
+  font-size: 1.1em;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #495057;
+  font-weight: 500;
+  font-size: 0.95em;
+}
+
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 0.95em;
+  transition: border-color 0.3s;
+  box-sizing: border-box;
+}
+
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.employee-selection {
+  margin-bottom: 20px;
+}
+
+.selection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.select-all-btn {
+  padding: 6px 12px;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: all 0.3s;
+}
+
+.select-all-btn:hover {
+  background: #5a6268;
+}
+
+.employee-checkboxes {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8f9fa;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s;
+  margin-bottom: 4px;
+}
+
+.checkbox-label:hover {
+  background: #e9ecef;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin: 0;
+  transform: scale(1.1);
+}
+
+.checkbox-label span {
+  font-size: 0.9em;
+  color: #495057;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid #e9ecef;
+}
+
+.modal-actions button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s;
+  font-size: 0.95em;
+}
+
+.modal-actions button[type="button"] {
+  background: #6c757d;
+  color: white;
+}
+
+.modal-actions button[type="button"]:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+.modal-actions button[type="submit"] {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+}
+
+.modal-actions button[type="submit"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .vacation-management-modal {
+    width: 95%;
+    margin: 10px;
+  }
+
+  .modal-mode-tabs {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .vacation-item-card {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .vacation-actions {
+    align-self: flex-end;
+  }
+
+  .employee-checkboxes {
+    max-height: 150px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions button {
+    width: 100%;
+  }
+}
+
 /* Employee Status Styles */
 .employee-status {
   margin-bottom: 20px;

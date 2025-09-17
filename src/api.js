@@ -49,6 +49,14 @@ class VacationAPI {
     });
   }
 
+  // 휴가 수정
+  async updateVacation(vacationId, vacationData) {
+    return this.request(`/api/vacations/${vacationId}`, {
+      method: 'PUT',
+      body: JSON.stringify(vacationData),
+    });
+  }
+
   // 휴가 삭제
   async deleteVacation(vacationId) {
     return this.request(`/api/vacations/${vacationId}`, {

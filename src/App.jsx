@@ -31,6 +31,11 @@ function App() {
     reason: '',
     applyToAll: false
   })
+
+  // New states for integrated modal
+  const [selectedDateVacations, setSelectedDateVacations] = useState([])
+  const [modalMode, setModalMode] = useState('view') // 'view', 'add', 'edit'
+  const [editingVacation, setEditingVacation] = useState(null)
   const dashboardRef = useRef(null)
 
   // Employee management states
@@ -107,12 +112,12 @@ function App() {
     return vacations.filter(vacation => vacation.employeeId === employeeId)
   }
 
-  // 입사일로부터 1년이 지났는지 확인
+  // 입사일로부터 13개월이 지났는지 확인 (갱신일 전까지는 1년미만으로 처리)
   const isEmployeeOverOneYear = (hireDate) => {
     const hire = new Date(hireDate)
     const today = new Date()
-    const oneYearAfterHire = new Date(hire.getFullYear() + 1, hire.getMonth(), hire.getDate())
-    return today >= oneYearAfterHire
+    const thirteenMonthsAfterHire = new Date(hire.getFullYear() + 1, hire.getMonth() + 1, hire.getDate())
+    return today >= thirteenMonthsAfterHire
   }
 
   // 휴가 년도 계산 (입사일 기준)
@@ -133,7 +138,7 @@ function App() {
   // 현재 휴가 년도의 총 휴가 일수 계산
   const getCurrentYearAllowance = (employee) => {
     if (!isEmployeeOverOneYear(employee.hireDate)) {
-      return 0 // 신입사원은 기준이 0일
+      return 0 // 1년미만은 기준이 0일
     }
     
     // 갱신 횟수에 따른 휴가 일수 계산
@@ -213,9 +218,14 @@ function App() {
     const isOverOneYear = isEmployeeOverOneYear(employee.hireDate)
     
     if (!isOverOneYear) {
-      // 신입사원: 0일 기준에서 사용한 일수 표시
+      // 1년미만: current_remaining_days가 음수로 설정되어 있으면 그것을 사용한 휴가로 표시
+      let actualUsedDays = usedDays
+      if (employee.currentRemainingDays !== undefined && employee.currentRemainingDays !== null && employee.currentRemainingDays < 0) {
+        actualUsedDays = -employee.currentRemainingDays
+      }
+      
       return { 
-        usedDays, 
+        usedDays: actualUsedDays, 
         remainingDays: 0, 
         currentAllowance: 0,
         isNewEmployee: true,
@@ -343,14 +353,21 @@ function App() {
   }
 
   const handleDateClick = (date) => {
+    const dateVacations = getVacationsForDate(date)
     setSelectedDate(date)
+    setSelectedDateVacations(dateVacations)
     setShowModal(true)
+
+    // 기존 휴가가 있으면 조회 모드, 없으면 등록 모드
+    setModalMode(dateVacations.length > 0 ? 'view' : 'add')
+
     setModalFormData({
       type: '연차',
       reason: '',
       applyToAll: false
     })
     setSelectedEmployees([])
+    setEditingVacation(null)
   }
 
   const handleEmployeeToggle = (employeeId) => {
@@ -373,45 +390,127 @@ function App() {
 
   const handleModalSubmit = async (e) => {
     e.preventDefault()
-    
-    if (selectedEmployees.length === 0) {
-      alert('직원을 선택해주세요.')
-      return
-    }
 
-    try {
-      const dateStr = selectedDate.toISOString().split('T')[0]
-      
-      // 각 직원에 대해 휴가 등록
-      const promises = selectedEmployees.map(employeeId => {
-        const vacationData = {
-          employee_id: employeeId,
+    if (modalMode === 'edit' && editingVacation) {
+      // 휴가 수정 모드
+      try {
+        const updatedVacationData = {
+          employee_id: editingVacation.employeeId,
           type: modalFormData.type,
-          start_date: dateStr,
-          end_date: dateStr,
+          start_date: editingVacation.startDate,
+          end_date: editingVacation.endDate,
           reason: modalFormData.reason || null
         }
-        return VacationAPI.createVacation(vacationData)
-      })
-      
-      await Promise.all(promises)
-      
-      // 휴가 데이터와 직원 데이터 모두 재로드 (남은 휴가 실시간 반영)
-      await Promise.all([loadVacations(), loadEmployees()])
-      
-      setShowModal(false)
-      setSelectedDate(null)
-      setSelectedEmployees([])
-      
-      const employeeNames = selectedEmployees.map(id => {
-        const emp = employees.find(emp => emp.id === id)
-        return emp.name
-      }).join(', ')
-      alert(`${employeeNames}님의 휴가가 등록되었습니다.`)
-    } catch (err) {
-      console.error('휴가 등록 실패:', err)
-      alert('휴가 등록에 실패했습니다.')
+
+        await VacationAPI.updateVacation(editingVacation.id, updatedVacationData)
+
+        // 데이터 재로드
+        await Promise.all([loadVacations(), loadEmployees()])
+
+        // 선택된 날짜의 휴가 업데이트
+        const updatedDateVacations = getVacationsForDate(selectedDate)
+        setSelectedDateVacations(updatedDateVacations)
+
+        setModalMode('view')
+        setEditingVacation(null)
+        alert('휴가가 수정되었습니다.')
+      } catch (err) {
+        console.error('휴가 수정 실패:', err)
+        alert('휴가 수정에 실패했습니다.')
+      }
+    } else if (modalMode === 'add') {
+      // 휴가 등록 모드
+      if (selectedEmployees.length === 0) {
+        alert('직원을 선택해주세요.')
+        return
+      }
+
+      try {
+        const dateStr = selectedDate.toISOString().split('T')[0]
+
+        // 각 직원에 대해 휴가 등록
+        const promises = selectedEmployees.map(employeeId => {
+          const vacationData = {
+            employee_id: employeeId,
+            type: modalFormData.type,
+            start_date: dateStr,
+            end_date: dateStr,
+            reason: modalFormData.reason || null
+          }
+          return VacationAPI.createVacation(vacationData)
+        })
+
+        await Promise.all(promises)
+
+        // 휴가 데이터와 직원 데이터 모두 재로드 (남은 휴가 실시간 반영)
+        await Promise.all([loadVacations(), loadEmployees()])
+
+        // 선택된 날짜의 휴가 업데이트
+        const updatedDateVacations = getVacationsForDate(selectedDate)
+        setSelectedDateVacations(updatedDateVacations)
+
+        setSelectedEmployees([])
+        setModalMode('view')
+
+        const employeeNames = selectedEmployees.map(id => {
+          const emp = employees.find(emp => emp.id === id)
+          return emp.name
+        }).join(', ')
+        alert(`${employeeNames}님의 휴가가 등록되었습니다.`)
+      } catch (err) {
+        console.error('휴가 등록 실패:', err)
+        alert('휴가 등록에 실패했습니다.')
+      }
     }
+  }
+
+  // 휴가 삭제 핸들러
+  const handleDeleteVacation = async (vacationId, employeeName) => {
+    if (confirm(`${employeeName}님의 휴가를 삭제하시겠습니까?`)) {
+      try {
+        await VacationAPI.deleteVacation(vacationId)
+
+        // 데이터 재로드
+        await Promise.all([loadVacations(), loadEmployees()])
+
+        // 선택된 날짜의 휴가 업데이트
+        const updatedDateVacations = getVacationsForDate(selectedDate)
+        setSelectedDateVacations(updatedDateVacations)
+
+        // 삭제 후 휴가가 없으면 등록 모드로 변경
+        if (updatedDateVacations.length === 0) {
+          setModalMode('add')
+        }
+
+        alert('휴가가 삭제되었습니다.')
+      } catch (err) {
+        console.error('휴가 삭제 실패:', err)
+        alert('휴가 삭제에 실패했습니다.')
+      }
+    }
+  }
+
+  // 휴가 편집 시작
+  const handleEditVacation = (vacation) => {
+    setEditingVacation(vacation)
+    setModalFormData({
+      type: vacation.type,
+      reason: vacation.reason || '',
+      applyToAll: false
+    })
+    setModalMode('edit')
+  }
+
+  // 모달 모드 변경
+  const switchModalMode = (mode) => {
+    setModalMode(mode)
+    setEditingVacation(null)
+    setSelectedEmployees([])
+    setModalFormData({
+      type: '연차',
+      reason: '',
+      applyToAll: false
+    })
   }
 
   // Export functions
@@ -591,13 +690,16 @@ function App() {
   // Employee edit functions
   const openEditModal = (employee) => {
     const stats = getEmployeeStats(employee)
+    const isNewEmployee = !isEmployeeOverOneYear(employee.hireDate)
+    
     setEditingEmployee(employee)
     setEditForm({
       name: employee.name,
       department: employee.department,
       yearlyAllowance: employee.yearlyAllowance,
       hireDate: employee.hireDate,
-      currentRemainingDays: employee.currentRemainingDays || stats.remainingDays
+      // 1년미만인 경우 사용한 휴가를, 1년이상인 경우 남은 휴가를 표시
+      currentRemainingDays: isNewEmployee ? stats.usedDays : (employee.currentRemainingDays || stats.remainingDays)
     })
     setShowEditModal(true)
   }
@@ -617,12 +719,22 @@ function App() {
     }
 
     try {
+      const isNewEmployee = !isEmployeeOverOneYear(editingEmployee.hireDate)
+      let finalRemainingDays = parseFloat(editForm.currentRemainingDays)
+      
+      // 1년미만의 경우 입력된 값을 사용한 휴가로 처리하고 남은 휴가는 음수로 계산
+      if (isNewEmployee) {
+        // 사용한 휴가가 입력되었으므로 남은 휴가는 0 - 사용한 휴가 = 음수
+        finalRemainingDays = -parseFloat(editForm.currentRemainingDays)
+      }
+      // 일반 직원의 경우 그대로 남은 휴가로 처리
+
       const employeeData = {
         name: editForm.name,
         department: editForm.department,
         yearly_allowance: parseInt(editForm.yearlyAllowance),
         hire_date: editForm.hireDate,
-        current_remaining_days: parseInt(editForm.currentRemainingDays)
+        current_remaining_days: finalRemainingDays
       }
 
       await VacationAPI.updateEmployee(editingEmployee.id, employeeData)
@@ -773,9 +885,9 @@ function App() {
                   <div className="employee-status">
                     <div className="status-badge">
                       {stats.isNewEmployee ? (
-                        <span className="badge new-employee">신입사원</span>
+                        <span className="badge new-employee">1년미만</span>
                       ) : (
-                        <span className="badge regular-employee">재직사원</span>
+                        <span className="badge regular-employee">1년이상</span>
                       )}
                     </div>
                     <div className="hire-info">
@@ -791,10 +903,10 @@ function App() {
                       <>
                         <div className="stat-item main-stat">
                           <span className="label">사용한 휴가</span>
-                          <span className="value used-highlight">{stats.usedDays}일 사용</span>
+                          <span className="value used-highlight">{stats.usedDays}일</span>
                         </div>
                         <div className="stat-item new-employee-note">
-                          <span className="note">입사 1년 후 정규 휴가 부여</span>
+                          <span className="note">갱신일 후 정규 휴가 부여</span>
                         </div>
                       </>
                     ) : (
@@ -806,8 +918,8 @@ function App() {
                           </span>
                         </div>
                         <div className="stat-item secondary-stat">
-                          <span className="label">연간 휴가</span>
-                          <span className="value">{employee.yearlyAllowance}일</span>
+                          <span className="label">사용한 휴가</span>
+                          <span className="value">{stats.usedDays}일</span>
                         </div>
                       </>
                     )}
@@ -918,74 +1030,200 @@ function App() {
         </div>
       )}
 
-      {/* Vacation Registration Modal */}
+      {/* Integrated Vacation Management Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>
-              {selectedDate?.toLocaleDateString('ko-KR')} 휴가 등록
-            </h3>
-            
-            <form onSubmit={handleModalSubmit}>
-              <div className="form-group">
-                <label>휴가 구분</label>
-                <select 
-                  value={modalFormData.type}
-                  onChange={(e) => setModalFormData({...modalFormData, type: e.target.value})}
-                >
-                  <option value="연차">연차</option>
-                  <option value="반차">반차</option>
-                  <option value="병가">병가</option>
-                  <option value="경조사">경조사</option>
-                  <option value="특별휴가">특별휴가</option>
-                </select>
+          <div className="modal-content vacation-management-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>
+                📅 {selectedDate?.toLocaleDateString('ko-KR')} 휴가 관리
+              </h3>
+              <button className="close-btn" onClick={() => setShowModal(false)}>
+                ✕
+              </button>
+            </div>
+
+            {/* Mode Toggle Buttons */}
+            <div className="modal-mode-tabs">
+              <button
+                className={`mode-tab ${modalMode === 'view' ? 'active' : ''}`}
+                onClick={() => switchModalMode('view')}
+                disabled={selectedDateVacations.length === 0}
+              >
+                📋 조회 ({selectedDateVacations.length})
+              </button>
+              <button
+                className={`mode-tab ${modalMode === 'add' ? 'active' : ''}`}
+                onClick={() => switchModalMode('add')}
+              >
+                ➕ 추가
+              </button>
+            </div>
+
+            {/* View Mode: Show existing vacations */}
+            {modalMode === 'view' && (
+              <div className="vacation-list-view">
+                <h4>이 날의 휴가 현황</h4>
+                {selectedDateVacations.length === 0 ? (
+                  <div className="no-vacation-info">
+                    <p>등록된 휴가가 없습니다.</p>
+                    <button
+                      className="switch-mode-btn"
+                      onClick={() => switchModalMode('add')}
+                    >
+                      휴가 추가하기
+                    </button>
+                  </div>
+                ) : (
+                  <div className="vacation-items">
+                    {selectedDateVacations.map(vacation => (
+                      <div key={vacation.id} className="vacation-item-card">
+                        <div className="vacation-info">
+                          <div className="employee-info">
+                            <span className="employee-name">{vacation.employeeName}</span>
+                            <span className={`vacation-type-badge ${vacation.type}`}>
+                              {vacation.type}
+                            </span>
+                          </div>
+                          {vacation.reason && (
+                            <div className="vacation-reason">
+                              💭 {vacation.reason}
+                            </div>
+                          )}
+                          <div className="vacation-duration">
+                            📊 {calculateDays(vacation.startDate, vacation.endDate, vacation.type)}일
+                          </div>
+                        </div>
+                        <div className="vacation-actions">
+                          <button
+                            className="edit-btn"
+                            onClick={() => handleEditVacation(vacation)}
+                            title="휴가 수정"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            className="delete-btn"
+                            onClick={() => handleDeleteVacation(vacation.id, vacation.employeeName)}
+                            title="휴가 삭제"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-              <div className="form-group">
-                <label>사유 (선택)</label>
-                <textarea 
-                  value={modalFormData.reason}
-                  onChange={(e) => setModalFormData({...modalFormData, reason: e.target.value})}
-                  placeholder="휴가 사유를 입력해주세요"
-                  rows="3"
-                />
+            )}
+
+            {/* Add Mode: Add new vacation */}
+            {modalMode === 'add' && (
+              <div className="vacation-add-form">
+                <h4>새 휴가 추가</h4>
+                <form onSubmit={handleModalSubmit}>
+                  <div className="form-group">
+                    <label>휴가 구분</label>
+                    <select
+                      value={modalFormData.type}
+                      onChange={(e) => setModalFormData({...modalFormData, type: e.target.value})}
+                    >
+                      <option value="연차">연차</option>
+                      <option value="반차">반차</option>
+                      <option value="병가">병가</option>
+                      <option value="경조사">경조사</option>
+                      <option value="특별휴가">특별휴가</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>사유 (선택)</label>
+                    <textarea
+                      value={modalFormData.reason}
+                      onChange={(e) => setModalFormData({...modalFormData, reason: e.target.value})}
+                      placeholder="휴가 사유를 입력해주세요"
+                      rows="3"
+                    />
+                  </div>
+
+                  <div className="employee-selection">
+                    <div className="selection-header">
+                      <label>대상 직원</label>
+                      <button
+                        type="button"
+                        className="select-all-btn"
+                        onClick={handleSelectAll}
+                      >
+                        {selectedEmployees.length === employees.length ? '전체 해제' : '전체 선택'}
+                      </button>
+                    </div>
+
+                    <div className="employee-checkboxes">
+                      {employees.map(employee => (
+                        <label key={employee.id} className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployees.includes(employee.id)}
+                            onChange={() => handleEmployeeToggle(employee.id)}
+                          />
+                          <span>{employee.name} ({employee.department})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="modal-actions">
+                    <button type="button" onClick={() => setShowModal(false)}>
+                      취소
+                    </button>
+                    <button type="submit">
+                      등록
+                    </button>
+                  </div>
+                </form>
               </div>
-              
-              <div className="employee-selection">
-                <div className="selection-header">
-                  <label>대상 직원</label>
-                  <button 
-                    type="button" 
-                    className="select-all-btn"
-                    onClick={handleSelectAll}
-                  >
-                    {selectedEmployees.length === employees.length ? '전체 해제' : '전체 선택'}
-                  </button>
-                </div>
-                
-                <div className="employee-checkboxes">
-                  {employees.map(employee => (
-                    <label key={employee.id} className="checkbox-label">
-                      <input 
-                        type="checkbox"
-                        checked={selectedEmployees.includes(employee.id)}
-                        onChange={() => handleEmployeeToggle(employee.id)}
-                      />
-                      <span>{employee.name} ({employee.department})</span>
-                    </label>
-                  ))}
-                </div>
+            )}
+
+            {/* Edit Mode: Edit existing vacation */}
+            {modalMode === 'edit' && editingVacation && (
+              <div className="vacation-edit-form">
+                <h4>휴가 수정 - {editingVacation.employeeName}</h4>
+                <form onSubmit={handleModalSubmit}>
+                  <div className="form-group">
+                    <label>휴가 구분</label>
+                    <select
+                      value={modalFormData.type}
+                      onChange={(e) => setModalFormData({...modalFormData, type: e.target.value})}
+                    >
+                      <option value="연차">연차</option>
+                      <option value="반차">반차</option>
+                      <option value="병가">병가</option>
+                      <option value="경조사">경조사</option>
+                      <option value="특별휴가">특별휴가</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>사유 (선택)</label>
+                    <textarea
+                      value={modalFormData.reason}
+                      onChange={(e) => setModalFormData({...modalFormData, reason: e.target.value})}
+                      placeholder="휴가 사유를 입력해주세요"
+                      rows="3"
+                    />
+                  </div>
+
+                  <div className="modal-actions">
+                    <button type="button" onClick={() => switchModalMode('view')}>
+                      취소
+                    </button>
+                    <button type="submit">
+                      수정 완료
+                    </button>
+                  </div>
+                </form>
               </div>
-              
-              <div className="modal-actions">
-                <button type="button" onClick={() => setShowModal(false)}>
-                  취소
-                </button>
-                <button type="submit">
-                  등록
-                </button>
-              </div>
-            </form>
+            )}
           </div>
         </div>
       )}
@@ -1218,7 +1456,7 @@ function App() {
                           </div>
                           <div className="detail-item">
                             <span className="label">남은 휴가:</span>
-                            <span className="value">{stats.isNewEmployee ? '신입사원' : `${stats.remainingDays}일`}</span>
+                            <span className="value">{stats.isNewEmployee ? '1년미만' : `${stats.remainingDays}일`}</span>
                           </div>
                           <div className="detail-item">
                             <span className="label">휴가 기록:</span>
@@ -1312,17 +1550,21 @@ function App() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>현재 남은 휴가 일수</label>
+                  <label>
+                    {editingEmployee && !isEmployeeOverOneYear(editingEmployee.hireDate) ? '사용한 휴가 일수' : '현재 남은 휴가 일수'}
+                  </label>
                   <input 
                     type="number" 
                     name="currentRemainingDays"
                     value={editForm.currentRemainingDays}
                     onChange={handleEditFormChange}
-                    min="0"
-                    max="50"
+                    step="0.5"
                   />
                   <small className="form-help">
-                    직접 수정 가능합니다. 자동 계산값을 무시하고 이 값이 사용됩니다.
+                    {editingEmployee && !isEmployeeOverOneYear(editingEmployee.hireDate) 
+                      ? '1년미만 직원은 사용한 휴가 일수를 입력하세요.'
+                      : '직접 수정 가능합니다. 자동 계산값을 무시하고 이 값이 사용됩니다.'
+                    }
                   </small>
                 </div>
               </div>
