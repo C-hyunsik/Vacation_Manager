@@ -537,7 +537,7 @@ function App() {
 
   const exportToPDF = async () => {
     if (!dashboardRef.current) return
-    
+
     try {
       const canvas = await html2canvas(dashboardRef.current, {
         scale: 2,
@@ -545,18 +545,34 @@ function App() {
         allowTaint: true,
         backgroundColor: '#f8f9fa'
       })
-      
+
       const imgData = canvas.toDataURL('image/png')
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
         format: 'a4'
       })
-      
-      const imgWidth = 287 // A4 landscape width in mm minus margins
+
+      const pageWidth = 287 // A4 landscape width in mm minus margins
+      const pageHeight = 200 // A4 landscape height in mm minus margins
+      const imgWidth = pageWidth
       const imgHeight = (canvas.height * imgWidth) / canvas.width
-      
+
+      let heightLeft = imgHeight
+      let position = 0
+
+      // 첫 번째 페이지 추가
       pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+
+      // 추가 페이지가 필요한 경우 페이지 분할
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 10, position + 10, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+
       pdf.save(`직원휴가현황_${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (error) {
       console.error('Error exporting PDF:', error)
@@ -592,7 +608,7 @@ function App() {
   const exportEmployeeCardToPDF = async (employeeId, employeeName) => {
     const cardElement = document.getElementById(`employee-card-${employeeId}`)
     if (!cardElement) return
-    
+
     try {
       const canvas = await html2canvas(cardElement, {
         scale: 2,
@@ -602,18 +618,34 @@ function App() {
         width: cardElement.offsetWidth,
         height: cardElement.offsetHeight
       })
-      
+
       const imgData = canvas.toDataURL('image/png')
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       })
-      
-      const imgWidth = 180 // A4 portrait width in mm minus margins
+
+      const pageWidth = 180 // A4 portrait width in mm minus margins
+      const pageHeight = 250 // A4 portrait height in mm minus margins
+      const imgWidth = pageWidth
       const imgHeight = (canvas.height * imgWidth) / canvas.width
-      
+
+      let heightLeft = imgHeight
+      let position = 0
+
+      // 첫 번째 페이지 추가
       pdf.addImage(imgData, 'PNG', 15, 15, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+
+      // 추가 페이지가 필요한 경우 페이지 분할
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 15, position + 15, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+
       pdf.save(`${employeeName}_휴가현황_${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (error) {
       console.error('Error exporting employee card PDF:', error)
