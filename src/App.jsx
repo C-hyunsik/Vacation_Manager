@@ -938,7 +938,7 @@ function App() {
                           <span className="value used-highlight">{stats.usedDays}일</span>
                         </div>
                         <div className="stat-item new-employee-note">
-                          <span className="note">갱신일 후 정규 휴가 부여</span>
+                          <span className="note"></span>
                         </div>
                       </>
                     ) : (
